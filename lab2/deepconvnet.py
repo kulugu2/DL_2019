@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 device = torch.device('cuda:0')
-learning_rate = 0.005 
+learning_rate = 0.0005 
 batch_size = 1080
-epochs = 100
+epochs = 2000
 
 class dataset(torch.utils.data.Dataset):
     def __init__(self, data, label):
@@ -33,7 +33,7 @@ class deepconvnet(nn.Module):
                 #nn.ReLU(),
                 #nn.LeakyReLU(),
                 nn.MaxPool2d(kernel_size=(1, 2)),
-                nn.Dropout(p=0.5)
+                nn.Dropout(p=0.2)
                 )
         self.secconv = nn.Sequential(
                 nn.Conv2d(25, 50, kernel_size=(1, 5)),
@@ -43,7 +43,7 @@ class deepconvnet(nn.Module):
                 #nn.ReLU(),
                 #nn.LeakyReLU(),
                 nn.MaxPool2d(kernel_size=(1, 2)),
-                nn.Dropout(p=0.5)
+                nn.Dropout(p=0.4)
                 )
         self.thridconv = nn.Sequential(
                 nn.Conv2d(50, 100, kernel_size=(1, 5)),
@@ -53,7 +53,7 @@ class deepconvnet(nn.Module):
                 #nn.ReLU(),
                 #nn.LeakyReLU(),
                 nn.MaxPool2d(kernel_size=(1, 2)),
-                nn.Dropout(p=0.5)
+                nn.Dropout(p=0.6)
                 )
         self.fourthconv = nn.Sequential(
                 nn.Conv2d(100, 200, kernel_size=(1, 5)),
@@ -63,7 +63,7 @@ class deepconvnet(nn.Module):
                 #nn.ReLU(),
                 #nn.LeakyReLU(),
                 nn.MaxPool2d(kernel_size=(1, 2)),
-                nn.Dropout(p=0.5)
+                nn.Dropout(p=0.8)
                 )
         self.classify = nn.Sequential(
                 nn.Linear(in_features=8600, out_features=2, bias=True)
@@ -162,18 +162,19 @@ test_dataset  = dataset(test_data, test_label)
 
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
-
+import sys
 if __name__ == '__main__':
     
-    
-    x_axis = np.arange(epochs)
+    #print(ELU_model)
+    #sys.exit()
+    #x_axis = np.arange(epochs)
     # start training
     LReLU_train_acc, LReLU_test_acc = train(LReLU_model, LReLU_optimizer)    
-    ReLU_train_acc, ReLU_test_acc = train(ReLU_model, ReLU_optimizer)    
-    ELU_train_acc, ELU_test_acc = train(ELU_model, ELU_optimizer)    
+    #ReLU_train_acc, ReLU_test_acc = train(ReLU_model, ReLU_optimizer)    
+    #ELU_train_acc, ELU_test_acc = train(ELU_model, ELU_optimizer)    
     # start testing
     test(LReLU_model)
-
+    '''
     plt.plot(x_axis, LReLU_train_acc, 'r', label='leaky_relu_train')
     plt.plot(x_axis, LReLU_test_acc, 'b', label='leaky_relu_test')
 
@@ -182,8 +183,11 @@ if __name__ == '__main__':
     plt.plot(x_axis, ELU_train_acc, 'y', label='ELU_train')
     plt.plot(x_axis, ELU_test_acc, 'k', label='ELU_test')
     plt.legend()
+    plt.title("Activation function comparision(DeepConvNet)")
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy(%)')
     plt.show()
-    
+    '''
     '''
     model.eval()
     test_loss = 0
