@@ -3,3 +3,5 @@
 *.npz
 *.pdf
 *.tar
+*.csv
+*.jpeg

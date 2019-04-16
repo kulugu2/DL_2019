@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 device = torch.device('cuda:0')
 learning_rate = 0.0003 #0.0003 
 batch_size = 1080
-epochs = 2500      #6000
+epochs = 6000      #6000
 
 class dataset(torch.utils.data.Dataset):
     def __init__(self, data, label):
@@ -73,6 +73,7 @@ def adjust_lr(optimizer, epoch):
 ReLU_model = EEGnet(activation='ReLU').to(device)
 ReLU_optimizer = torch.optim.Adam(ReLU_model.parameters(), lr=learning_rate)
 ELU_model = EEGnet(activation='ELU').to(device)
+load_model = EEGnet(activation='ReLU').to(device)
 LReLU_model = EEGnet(activation='Leaky_ReLU').to(device)
 ELU_optimizer = torch.optim.Adam(ELU_model.parameters(), lr=learning_rate)
 LReLU_optimizer = torch.optim.Adam(LReLU_model.parameters(), lr=learning_rate)
@@ -104,9 +105,9 @@ def train(model, optimizer):
             
         print('Epoch: {} \tLoss: {:.6f}\t Accuracy: {:.2f}'.format(epoch, loss.item(), 100.*correct/len(train_loader.dataset)))
         acc = test(model)
-        #if (acc >= 86.0):
-        #    torch.save({ 'epoch': epoch, 'state_dict': model.state_dict()}, 'eegnet_model_1.tar')
-        #    break
+        if (acc >= 87.0):
+            torch.save({ 'epoch': epoch, 'state_dict': model.state_dict()}, 'eegnet_model.tar')
+            break
 
         train_acc.append(100.* correct/len(train_loader.dataset))
         #acc = test(model)
@@ -149,10 +150,14 @@ if __name__ == '__main__':
     x_axis = np.arange(epochs)
     # start training
     #LReLU_train_acc, LReLU_test_acc = train(LReLU_model, LReLU_optimizer)    
-    ReLU_train_acc, ReLU_test_acc = train(ReLU_model, ReLU_optimizer)    
+    #ReLU_train_acc, ReLU_test_acc = train(ReLU_model, ReLU_optimizer)    
+    checkpoint = torch.load('eegnet_model.tar')
+    load_model.load_state_dict(checkpoint['state_dict'])
+    print(checkpoint['epoch'])
+    test(load_model)
     #ELU_train_acc, ELU_test_acc = train(ELU_model, ELU_optimizer)    
     # start testing
-    test(ReLU_model)
+    #test(ReLU_model)
     '''
     plt.plot(x_axis, LReLU_train_acc, 'r', label='leaky_relu_train')
     plt.plot(x_axis, LReLU_test_acc, 'b', label='leaky_relu_test')

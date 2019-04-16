@@ -8,7 +8,7 @@ import numpy as np
 device = torch.device('cuda:0')
 learning_rate = 0.0005 
 batch_size = 1080
-epochs = 2000
+epochs = 1000
 
 class dataset(torch.utils.data.Dataset):
     def __init__(self, data, label):
@@ -70,17 +70,11 @@ class deepconvnet(nn.Module):
                 )
 
     def forward(self, x):
-        #print(x.shape)
         out = self.firstconv(x)
-        #print(out.shape)
         out = self.secconv(out)
-        #print(out.shape)
         out = self.thridconv(out)
-        #print(out.shape)
         out = self.fourthconv(out)
-        #print(out.shape)
         out = out.reshape(out.size(0), -1)
-        #print(out.shape)
         out = self.classify(out)
         return out
 def adjust_lr(optimizer, epoch):
