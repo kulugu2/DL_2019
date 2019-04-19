@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.utils.data
 import numpy as np
 import matplotlib.pyplot as plt
-
+import plot_confusion_matrix as cm
 device = torch.device('cuda:0')
 learning_rate = 1e-3 #0.0003 
 batch_size = 4
@@ -80,6 +80,7 @@ class Resnet50(nn.Module):
         return out
 
 resnet_model = Resnet50().to(device)
+load_model = Resnet50().to(device)
         
 def adjust_lr(optimizer, epoch):
     if epoch < 10:
@@ -143,7 +144,8 @@ def test(model):
     model.eval()
     test_loss = 0
     correct = 0
-
+    
+    preds = []
     for i, (data, labels) in enumerate(test_loader):
         #data = torch.from_numpy(data)
         data = data.to(device, dtype=torch.float)
@@ -153,11 +155,15 @@ def test(model):
             output = model(data)
         test_loss += loss_func(output, labels).item()
         _, pred = torch.max(output.data, 1)
+        #print(pred.tolist())
+        preds.extend(pred.tolist())
+        #print(preds)
         correct += (pred == labels).sum().item()
 
     print('Test set: Average loss: {:.4f}, Accuracy:{}/{} ({:.2f}%)'.format(
         test_loss, correct, len(test_loader.dataset), 100. * correct/len(test_loader.dataset)))
-
+    print(preds)
+    cm.plot_confusion_matrix(np.array(preds), np.array(test_dataset.label), np.array(['0','1','2','3','4']), normalize=True)
     return 100. * correct/len(test_loader.dataset)
 
 
@@ -171,13 +177,18 @@ test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch
 
 #import sys
 if __name__ == '__main__':
-    
+    #print("aaa")
+    #print(test_dataset.label)
+    #cm.plot_confusion_matrix(np.array([0,1,2]), np.array([1,0,2]), np.array(['0','1','2']), normalize=True)
     # start training
     #model = Resnet18()
-    print(resnet_model)
-    train_acc, test_acc = train(resnet_model, optimizer)
-    torch.save({ 'state_dict': resnet_model.state_dict()}, 'resnet50_without_pretrain.tar')
+    #print(resnet_model)
+    #train_acc, test_acc = train(resnet_model, optimizer)
+    #torch.save({ 'state_dict': resnet_model.state_dict()}, 'resnet50_without_pretrain.tar')
    
-    print(train_acc,test_acc)
+    checkpoint = torch.load('resnet50_without_pretrain.tar')
+    load_model.load_state_dict(checkpoint['state_dict'])    
+    test(load_model)
+    #print(train_acc,test_acc)
     # start testing
     #test(ReLU_model)

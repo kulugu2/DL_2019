@@ -5,83 +5,18 @@ import torch.utils.data
 import numpy as np
 import matplotlib.pyplot as plt
 import models
+import plot_confusion_matrix as cm
 
 device = torch.device('cuda:0')
-learning_rate = 0.001 #0.0003 
-batch_size = 6
-epochs = 10      #6000
+learning_rate = 1e-3 #0.0003 
+batch_size = 8
+epochs = 20     #6000
 
-class BottleNeck(nn.Module):
-    def __init__(self, in_channel, mid_channel):
-        super().__init__()
-        self.in_channel = in_channel
-        self.mid_channel = mid_channel
-        self.stride = 1
-        if in_channel != mid_channel*4:
-            self.stride = int(in_channel / mid_channel)
-
-        self.block = nn.Sequential(
-                nn.Conv2d(in_channel, mid_channel, kernel_size=1, stride=1, bias=False),
-                nn.BatchNorm2d(mid_channel),
-                nn.ReLU(),
-                nn.Conv2d(mid_channel, mid_channel, kernel_size=3, stride = self.stride, padding=1,  bias=False),
-                nn.BatchNorm2d(mid_channel),
-                nn.ReLU(),
-                nn.Conv2d(mid_channel, mid_channel*4, kernel_size=1, bias=False),
-                nn.BatchNorm2d(mid_channel*4)
-                )
-        self.downsample = None
-        if in_channel != mid_channel*4:
-            self.downsample = nn.Sequential(
-                    nn.Conv2d(in_channel, mid_channel*4, kernel_size=1, stride=self.stride, bias=False),
-                    nn.BatchNorm2d(mid_channel*4)
-                    )
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        out = self.block(x)
-        res = x
-        if self.in_channel != self.mid_channel*4:
-            res = self.downsample(x)
-        out += res
-        out = self.relu(out)
-
-        return out
-        
-
-class Resnet50(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-            )
-        #self.maxpool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = nn.Sequential(BottleNeck(64, 64), BottleNeck(256, 64), BottleNeck(256, 64))
-        self.layer2 = nn.Sequential(BottleNeck(256, 128), BottleNeck(512, 128), BottleNeck(512, 128), BottleNeck(512, 128)) 
-        self.layer3 = nn.Sequential(BottleNeck(512, 256), BottleNeck(1024, 256), BottleNeck(1024, 256),
-                                    BottleNeck(1024, 256), BottleNeck(1024, 256), BottleNeck(1024, 256))
-        self.layer4 = nn.Sequential(BottleNeck(1024, 512), BottleNeck(2048, 512), BottleNeck(2048, 512))
-        self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(2048 ,5)
-
-    def forward(self, x):
-        out = self.conv1(x)
-        #out = self.maxpool1(out)
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = self.avgpool(out)
-        out = out.view(out.size(0), -1)
-        out = self.fc(out)
-
-        return out
+outfile = open('tt.txt','w')
 
 resnet_model = models.ResNet().to(device)
         
+
 def adjust_lr(optimizer, epoch):
     if epoch < 10:
         lr = 0.01
@@ -127,14 +62,16 @@ def train(model, optimizer):
             correct += (pred == labels).sum().item()
             if i%100 == 0:
                 print('finish batch {}'.format(i))
+                outfile.write('finish batch {}\n'.format(i))
                 #print(loss)
                 #print(pred, labels)
             
         print('Epoch: {} \tLoss: {:.6f}\t Accuracy: {:.2f}'.format(epoch, loss.item(), 100.*correct/len(train_loader.dataset)))
+        outfile.write('Epoch: {} \tLoss: {:.6f}\t Accuracy: {:.2f}\n'.format(epoch, loss.item(), 100.*correct/len(train_loader.dataset)))
         acc = test(model)
-        #if (acc >= 87.0):
-        #    torch.save({ 'epoch': epoch, 'state_dict': model.state_dict()}, 'eegnet_model.tar')
-        #    break
+        if (acc >= 82.0):
+            torch.save({ 'epoch': epoch, 'state_dict': model.state_dict()}, 'resnet18_best_model.tar')
+            break
 
         train_acc.append(100.* correct/len(train_loader.dataset))
         #acc = test(model)
@@ -147,6 +84,7 @@ def test(model):
     test_loss = 0
     correct = 0
 
+    preds = []
     for i, (data, labels) in enumerate(test_loader):
         #data = torch.from_numpy(data)
         data = data.to(device, dtype=torch.float)
@@ -157,10 +95,14 @@ def test(model):
         test_loss += loss_func(output, labels).item()
         _, pred = torch.max(output.data, 1)
         correct += (pred == labels).sum().item()
+        preds.extend(pred.tolist())
 
     print('Test set: Average loss: {:.4f}, Accuracy:{}/{} ({:.2f}%)'.format(
         test_loss, correct, len(test_loader.dataset), 100. * correct/len(test_loader.dataset)))
 
+    outfile.write('Test set: Average loss: {:.4f}, Accuracy:{}/{} ({:.2f}%)\n'.format(
+        test_loss, correct, len(test_loader.dataset), 100. * correct/len(test_loader.dataset)))
+    cm.plot_confusion_matrix(np.array(preds), np.array(test_dataset.label), np.array(['0','1','2','3','4']), normalize=True)
     return 100. * correct/len(test_loader.dataset)
 
 
@@ -172,15 +114,24 @@ test_dataset  = dataloader.RetinopathyLoader('data/', 'test')
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=False)
 test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
+load_model = models.ResNet().to(device)
 #import sys
 if __name__ == '__main__':
     
     # start training
     #model = Resnet18()
-    print(resnet_model)
-    train_acc, test_acc = train(resnet_model, optimizer)
-    torch.save({ 'state_dict': resnet_model.state_dict()}, 'resnet18_with_pretrain.tar')
+    #print(resnet_model)
+    #train_acc, test_acc = train(resnet_model, optimizer)
+    #torch.save({ 'state_dict': resnet_model.state_dict()}, 'resnet18_with_pretrain_1.tar')
    
-    print(train_acc,test_acc)
+    checkpoint = torch.load('resnet50_best.tar')
+    load_model.load_state_dict(checkpoint['state_dict'])
+    test(load_model)
+    #print(train_acc,test_acc)
+    #print(train_acc, file=outfile)
+    #outfile.write('\n')
+    #print(test_acc, file=outfile)
+    #outfile.write('\n')
+    #outfile.close()
     # start testing
     #test(ReLU_model)

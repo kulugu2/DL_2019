@@ -4,46 +4,54 @@ import torch.nn as nn
 import torch.utils.data
 import numpy as np
 import matplotlib.pyplot as plt
+import models
 
+import torchvision.transforms as tr
 device = torch.device('cuda:0')
-learning_rate = 0.0005 #0.0003 
-batch_size = 6
+learning_rate = 0.0006 #0.0003 
+batch_size = 12
 epochs = 10      #6000
 
-class BasicBlock(nn.Module):
-    def __init__(self, in_channel, out_channel):
+outfile = open("resnet50_with_pretrain_5.txt", "w")
+class BottleNeck(nn.Module):
+    def __init__(self, in_channel, mid_channel):
         super().__init__()
         self.in_channel = in_channel
-        self.out_channel = out_channel
+        self.mid_channel = mid_channel
         self.stride = 1
-        if in_channel != out_channel:
-            self.stride = 2
+        if in_channel != mid_channel*4:
+            self.stride = int(in_channel / mid_channel)
+
         self.block = nn.Sequential(
-                nn.Conv2d(in_channel, out_channel, kernel_size=3 , padding=1, stride = self.stride, bias=False),
-                nn.BatchNorm2d(out_channel),
+                nn.Conv2d(in_channel, mid_channel, kernel_size=1, stride=1, bias=False),
+                nn.BatchNorm2d(mid_channel),
                 nn.ReLU(),
-                nn.Conv2d(out_channel, out_channel, kernel_size=3 , padding=1, stride = 1, bias=False),
-                nn.BatchNorm2d(out_channel)
+                nn.Conv2d(mid_channel, mid_channel, kernel_size=3, stride = self.stride, padding=1,  bias=False),
+                nn.BatchNorm2d(mid_channel),
+                nn.ReLU(),
+                nn.Conv2d(mid_channel, mid_channel*4, kernel_size=1, bias=False),
+                nn.BatchNorm2d(mid_channel*4)
                 )
         self.downsample = None
-        if in_channel != out_channel:
+        if in_channel != mid_channel*4:
             self.downsample = nn.Sequential(
-                nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=2, bias=False),
-                nn.BatchNorm2d(out_channel)
-                )
+                    nn.Conv2d(in_channel, mid_channel*4, kernel_size=1, stride=self.stride, bias=False),
+                    nn.BatchNorm2d(mid_channel*4)
+                    )
         self.relu = nn.ReLU()
-    
+
     def forward(self, x):
         out = self.block(x)
         res = x
-        if self.in_channel != self.out_channel:
+        if self.in_channel != self.mid_channel*4:
             res = self.downsample(x)
         out += res
         out = self.relu(out)
 
         return out
+        
 
-class Resnet18(nn.Module):
+class Resnet50(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Sequential(
@@ -53,12 +61,13 @@ class Resnet18(nn.Module):
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
             )
         #self.maxpool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = nn.Sequential(BasicBlock(64, 64), BasicBlock(64, 64))
-        self.layer2 = nn.Sequential(BasicBlock(64, 128), BasicBlock(128, 128))
-        self.layer3 = nn.Sequential(BasicBlock(128, 256), BasicBlock(256, 256))
-        self.layer4 = nn.Sequential(BasicBlock(256, 512), BasicBlock(512, 512))
+        self.layer1 = nn.Sequential(BottleNeck(64, 64), BottleNeck(256, 64), BottleNeck(256, 64))
+        self.layer2 = nn.Sequential(BottleNeck(256, 128), BottleNeck(512, 128), BottleNeck(512, 128), BottleNeck(512, 128)) 
+        self.layer3 = nn.Sequential(BottleNeck(512, 256), BottleNeck(1024, 256), BottleNeck(1024, 256),
+                                    BottleNeck(1024, 256), BottleNeck(1024, 256), BottleNeck(1024, 256))
+        self.layer4 = nn.Sequential(BottleNeck(1024, 512), BottleNeck(2048, 512), BottleNeck(2048, 512))
         self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(512 ,5)
+        self.fc = nn.Linear(2048 ,5)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -73,7 +82,7 @@ class Resnet18(nn.Module):
 
         return out
 
-resnet_model = Resnet18().to(device)
+resnet_model = models.ResNet().to(device)
         
 def adjust_lr(optimizer, epoch):
     if epoch < 10:
@@ -120,12 +129,17 @@ def train(model, optimizer):
             correct += (pred == labels).sum().item()
             if i%100 == 0:
                 print('finish batch {}'.format(i))
+                outfile.write('finish batch {}'.format(i))
+                outfile.write('\n')
+                #print(loss)
+                #print(pred, labels)
             
         print('Epoch: {} \tLoss: {:.6f}\t Accuracy: {:.2f}'.format(epoch, loss.item(), 100.*correct/len(train_loader.dataset)))
+        outfile.write('Epoch: {} \tLoss: {:.6f}\t Accuracy: {:.2f}\n'.format(epoch, loss.item(), 100.*correct/len(train_loader.dataset)))
         acc = test(model)
-        #if (acc >= 87.0):
-        #    torch.save({ 'epoch': epoch, 'state_dict': model.state_dict()}, 'eegnet_model.tar')
-        #    break
+        if (acc >= 82.0):
+            torch.save({ 'epoch': epoch, 'state_dict': model.state_dict()}, 'resnet50_best.tar')
+            break
 
         train_acc.append(100.* correct/len(train_loader.dataset))
         #acc = test(model)
@@ -146,37 +160,45 @@ def test(model):
         with torch.no_grad():
             output = model(data)
         test_loss += loss_func(output, labels).item()
-        #print(output.data)
         _, pred = torch.max(output.data, 1)
-        #print(pred)
         correct += (pred == labels).sum().item()
 
     print('Test set: Average loss: {:.4f}, Accuracy:{}/{} ({:.2f}%)'.format(
         test_loss, correct, len(test_loader.dataset), 100. * correct/len(test_loader.dataset)))
 
+    outfile.write('Test set: Average loss: {:.4f}, Accuracy:{}/{} ({:.2f}%)'.format(
+        test_loss, correct, len(test_loader.dataset), 100. * correct/len(test_loader.dataset)))
+    outfile.write('\n')
     return 100. * correct/len(test_loader.dataset)
 
+transform = tr.Compose([
+    tr.RandomHorizontalFlip(p=0.5),
+    #tr.ToTensor()
+    ])
 
-train_dataset = dataloader.RetinopathyLoader('data/', 'train')
+train_dataset = dataloader.RetinopathyLoader('data/', 'train', transform=transform)
 
 test_dataset  = dataloader.RetinopathyLoader('data/', 'test')
 
 
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=False)
 test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
-load_model = Resnet18().to(device)
+
 #import sys
 if __name__ == '__main__':
     
     # start training
     #model = Resnet18()
-    #print(resnet_model)
-    #train_acc, test_acc = train(resnet_model, optimizer)
-    #torch.save({ 'state_dict': resnet_model.state_dict()}, 'resnet18_without_pretrain1.tar')
-    checkpoint = torch.load('resnet18_with_pretrain_1.tar')
-    load_model.load_state_dict(checkpoint['state_dict'])
-    test(load_model)
-    #for i in range(len(train_acc)):
-    #    print(train_acc,test_acc)
+    print(resnet_model)
+    train_acc, test_acc = train(resnet_model, optimizer)
+    torch.save({ 'state_dict': resnet_model.state_dict()}, 'resnet50_with_pretrain_5.tar')
+   
+    print(train_acc,test_acc)
+    outfile.write(train_acc)
+    outfile.write('\n')
+    outfile.write(test_acc)
+    outfile.write('\n')
+
+    outfile.close()
     # start testing
     #test(ReLU_model)

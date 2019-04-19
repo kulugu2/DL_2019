@@ -2,7 +2,7 @@ import pandas as pd
 from torch.utils import data
 import numpy as np
 from PIL import Image
-
+import torchvision.transforms as tr
 
 def getData(mode):
     if mode == 'train':
@@ -16,7 +16,7 @@ def getData(mode):
 
 
 class RetinopathyLoader(data.Dataset):
-    def __init__(self, root, mode):
+    def __init__(self, root, mode, transform=None):
         """
         Args:
             root (string): Root path of the dataset.
@@ -28,6 +28,7 @@ class RetinopathyLoader(data.Dataset):
         self.root = root
         self.img_name, self.label = getData(mode)
         self.mode = mode
+        self.transform = transform
         print("> Found %d images..." % (len(self.img_name)))
         print(self.label)
 
@@ -58,7 +59,9 @@ class RetinopathyLoader(data.Dataset):
         
         img = Image.open(self.root+self.img_name[index]+'.jpeg')
         label = self.label[index]
-
+        
+        if self.transform:
+            img = self.transform(img)
         img = np.transpose(img, (2, 0, 1)) 
         m = np.max(img)
         img = img/255.
